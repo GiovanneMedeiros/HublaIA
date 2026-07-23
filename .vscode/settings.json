@@ -1,0 +1,29 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/out": true,
+    "**/coverage": true,
+    "**/.cache": true,
+    "**/.turbo": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/*.tsbuildinfo": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/out": true,
+    "**/coverage": true,
+    "**/.cache": true,
+    "**/.turbo": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/*.tsbuildinfo": true
+  },
+  "explorer.excludeGitIgnore": true
+}

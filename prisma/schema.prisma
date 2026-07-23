@@ -1,0 +1,815 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  SECRETARY
+  AGENT
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum PlanType {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum LeadStatus {
+  NEW
+  IN_QUEUE
+  WITH_AGENT
+  TRANSFERRED
+  CLOSED
+  ARCHIVED
+}
+
+enum LeadClassification {
+  RED
+  YELLOW
+  GREEN
+  BLUE
+  GRAY
+}
+
+enum SentimentType {
+  VERY_NEGATIVE
+  NEGATIVE
+  NEUTRAL
+  POSITIVE
+  VERY_POSITIVE
+}
+
+enum QueueStrategy {
+  ROUND_ROBIN
+  FIXED_ORDER
+  SPECIALTY
+  DEPARTMENT
+  AVAILABILITY
+  PRIORITY
+}
+
+enum AgentStatus {
+  ONLINE
+  AWAY
+  BUSY
+  OFFLINE
+}
+
+enum IntegrationType {
+  WHATSAPP
+  OPENAI
+  GOOGLE_CALENDAR
+  SMTP
+  WEBHOOK
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIAL
+  PAUSED
+  CANCELED
+  EXPIRED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+}
+
+// ============================================
+// CORE ENTITIES
+// ============================================
+
+model Company {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String      @db.VarChar(255)
+  slug              String      @unique @db.VarChar(100)
+  description       String?     @db.Text
+  logo              String?
+  
+  email             String      @db.VarChar(255)
+  phone             String?     @db.VarChar(20)
+  website           String?     @db.VarChar(255)
+  
+  country           String      @default("BR") @db.Char(2)
+  state             String?     @db.Char(2)
+  city              String?     @db.VarChar(100)
+  zipCode           String?     @db.VarChar(20)
+  address           String?     @db.VarChar(255)
+  
+  billingEmail      String      @db.VarChar(255)
+  taxId             String?     @db.VarChar(20)
+  billingAddress    Json?
+  
+  settings          Json        @default("{}")
+  metadata          Json        @default("{}")
+  
+  status            String      @default("ACTIVE") @db.VarChar(20)
+  isTrialExpired    Boolean     @default(false)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  deletedAt         DateTime?   @db.Timestamp(0)
+  
+  users             User[]
+  agents            Agent[]
+  leads             Lead[]
+  conversations     Conversation[]
+  messages          Message[]
+  subscriptions     Subscription[]
+  queues            Queue[]
+  departments       Department[]
+  integrations      Integration[]
+  onboarding        TenantOnboarding?
+  businessProfile   TenantBusinessProfile?
+  agentSetting      TenantAgentSetting?
+  routingRule       TenantRoutingRule?
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  prompts           AIPrompt[]
+  
+  @@index([slug])
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TenantOnboarding {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @unique @db.Uuid
+
+  currentStep       String      @default("company") @db.VarChar(40)
+  completedSteps    String[]    @default([])
+  isCompleted       Boolean     @default(false)
+  completedAt       DateTime?   @db.Timestamp(0)
+
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([isCompleted])
+}
+
+model TenantBusinessProfile {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @unique @db.Uuid
+
+  segment           String      @default("OUTRO") @db.VarChar(40)
+  city              String?     @db.VarChar(120)
+  businessDescription String?   @db.Text
+  communicationStyle String?    @db.VarChar(40)
+  importantInfo     String?     @db.Text
+
+  propertyTypes     String[]    @default([])
+  serviceAreas      String[]    @default([])
+  specialties       String[]    @default([])
+  priceRange        String?     @db.VarChar(120)
+  workingHours      String?     @db.VarChar(120)
+  extraDescription  String?     @db.Text
+
+  customData        Json        @default("{}")
+
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([segment])
+}
+
+model TenantAgentSetting {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @unique @db.Uuid
+
+  agentName         String      @default("Assistente HublaIA") @db.VarChar(120)
+  personality       String      @default("PROFISSIONAL") @db.VarChar(40)
+  language          String      @default("pt-BR") @db.VarChar(10)
+  welcomeMessage    String?     @db.Text
+  transferTriggers  String[]    @default([])
+  allowHumanRequest Boolean     @default(true)
+
+  classificationSettings Json   @default("{}")
+
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model TenantRoutingRule {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @unique @db.Uuid
+
+  distributionMode  String      @default("AUTOMATIC") @db.VarChar(40)
+  prioritizeAvailable Boolean   @default(true)
+  teamAvailability  Json        @default("[]")
+  queueOrder        Json        @default("[]")
+
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model User {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  email             String      @db.VarChar(255)
+  password          String      @db.VarChar(255)
+  
+  firstName         String      @db.VarChar(100)
+  lastName          String      @db.VarChar(100)
+  phone             String?     @db.VarChar(20)
+  avatar            String?
+  
+  role              UserRole    @default(VIEWER)
+  status            UserStatus  @default(ACTIVE)
+  
+  emailVerified     DateTime?   @db.Timestamp(0)
+  emailVerificationToken String? @db.VarChar(255)
+  
+  lastLogin         DateTime?   @db.Timestamp(0)
+  lastPasswordChange DateTime?  @db.Timestamp(0)
+  mfaEnabled        Boolean     @default(false)
+  mfaSecret         String?     @db.VarChar(255)
+  
+  language          String      @default("pt-BR") @db.VarChar(10)
+  timezone          String      @default("America/Sao_Paulo") @db.VarChar(50)
+  notificationPreferences Json   @default("{\"email\": true, \"push\": true}")
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  deletedAt         DateTime?   @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent             Agent?
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@index([status])
+  @@index([role])
+}
+
+model RefreshToken {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String      @db.Uuid
+  
+  token             String      @unique @db.Text
+  expiresAt         DateTime    @db.Timestamp(0)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Agent {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  userId            String      @unique @db.Uuid
+  
+  name              String      @db.VarChar(255)
+  title             String?     @db.VarChar(100)
+  bio               String?     @db.Text
+  
+  status            AgentStatus @default(OFFLINE)
+  isAvailable       Boolean     @default(false)
+  maxConcurrent     Int         @default(5)
+  currentConversations Int      @default(0)
+  
+  specialties       String[]    @default([])
+  departmentId      String?     @db.Uuid
+  
+  totalLeads        Int         @default(0)
+  totalClosed       Int         @default(0)
+  averageRating     Float?
+  responseTime      Int?
+  
+  settings          Json        @default("{}")
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  deletedAt         DateTime?   @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department        Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  leads             Lead[]
+  messages          Message[]
+  queueAssignments  QueueAssignment[]
+  
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([isAvailable])
+}
+
+model Department {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  name              String      @db.VarChar(255)
+  description       String?     @db.Text
+  color             String?     @db.VarChar(7)
+  
+  automationEnabled Boolean     @default(true)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agents            Agent[]
+  queues            Queue[]
+  
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// ============================================
+// LEAD & CONVERSATION
+// ============================================
+
+model Lead {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  name              String      @db.VarChar(255)
+  email             String?     @db.VarChar(255)
+  phone             String      @db.VarChar(20)
+  whatsappId        String?     @unique @db.VarChar(255)
+  
+  status            LeadStatus  @default(NEW)
+  classification    LeadClassification @default(GRAY)
+  qualificationScore Int?       @default(0)
+  sentiment         SentimentType @default(NEUTRAL)
+  
+  assignedToId      String?     @db.Uuid
+  queueId           String?     @db.Uuid
+  
+  source            String      @default("WHATSAPP") @db.VarChar(50)
+  tags              String[]    @default([])
+  customFields      Json        @default("{}")
+  
+  aiSummary         String?     @db.Text
+  aiNotes           String?     @db.Text
+  intent            String?     @db.VarChar(100)
+  
+  firstMessageAt    DateTime    @default(now()) @db.Timestamp(0)
+  lastMessageAt     DateTime    @updatedAt @db.Timestamp(0)
+  assignedAt        DateTime?   @db.Timestamp(0)
+  closedAt          DateTime?   @db.Timestamp(0)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  deletedAt         DateTime?   @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedAgent     Agent?      @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  queue             Queue?      @relation(fields: [queueId], references: [id], onDelete: SetNull)
+  conversations     Conversation[]
+  
+  @@unique([tenantId, whatsappId])
+  @@index([tenantId])
+  @@index([phone])
+  @@index([email])
+  @@index([assignedToId])
+  @@index([queueId])
+  @@index([status])
+  @@index([classification])
+  @@index([createdAt])
+  @@index([lastMessageAt])
+}
+
+model Conversation {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  leadId            String      @db.Uuid
+  
+  title             String?     @db.VarChar(255)
+  summary           String?     @db.Text
+  
+  isActive          Boolean     @default(true)
+  metadata          Json        @default("{}")
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead              Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  messages          Message[]
+  
+  @@index([tenantId])
+  @@index([leadId])
+  @@index([createdAt])
+}
+
+model Message {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  conversationId    String      @db.Uuid
+  
+  senderType        String      @db.VarChar(20)
+  senderId          String?     @db.Uuid
+  
+  content           String      @db.Text
+  contentType       String      @default("text") @db.VarChar(20)
+  attachments       Json?
+  
+  aiAnalysis        Json?
+  
+  isRead            Boolean     @default(false)
+  readAt            DateTime?   @db.Timestamp(0)
+  
+  externalId        String?     @db.VarChar(255)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  deletedAt         DateTime?   @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender            Agent?      @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  
+  @@index([tenantId])
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([senderType])
+  @@index([createdAt])
+  @@index([isRead])
+}
+
+// ============================================
+// QUEUE & DISTRIBUTION
+// ============================================
+
+model Queue {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  name              String      @db.VarChar(255)
+  description       String?     @db.Text
+  
+  strategy          QueueStrategy @default(ROUND_ROBIN)
+  departmentId      String?     @db.Uuid
+  
+  isActive          Boolean     @default(true)
+  maxRetries        Int         @default(3)
+  assignmentTimeout Int         @default(30)
+  
+  settings          Json        @default("{}")
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department        Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assignments       QueueAssignment[]
+  leads             Lead[]
+  
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([departmentId])
+  @@index([strategy])
+}
+
+model QueueAssignment {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queueId           String      @db.Uuid
+  agentId           String      @db.Uuid
+  
+  order             Int
+  isActive          Boolean     @default(true)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  queue             Queue       @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  agent             Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  
+  @@unique([queueId, agentId])
+  @@index([queueId])
+  @@index([agentId])
+  @@index([order])
+}
+
+// ============================================
+// BILLING & SUBSCRIPTION
+// ============================================
+
+model Subscription {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @unique @db.Uuid
+  
+  plan              PlanType    @default(STARTER)
+  status            SubscriptionStatus @default(TRIAL)
+  
+  startDate         DateTime    @db.Timestamp(0)
+  endDate           DateTime?   @db.Timestamp(0)
+  trialEndsAt       DateTime?   @db.Timestamp(0)
+  renewalDate       DateTime?   @db.Timestamp(0)
+  
+  price             Float       @default(0)
+  currency          String      @default("BRL") @db.Char(3)
+  billingCycle      String      @default("MONTHLY") @db.VarChar(20)
+  
+  leadsLimit        Int         @default(100)
+  agentsLimit       Int         @default(3)
+  storageLimit      Int         @default(5)
+  
+  autoRenew         Boolean     @default(true)
+  
+  stripeSubscriptionId String?  @db.VarChar(255)
+  nextBillingDate   DateTime?   @db.Timestamp(0)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices          Invoice[]
+  usageRecords      UsageRecord[]
+  
+  @@index([tenantId])
+  @@index([status])
+  @@index([renewalDate])
+}
+
+model UsageRecord {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subscriptionId    String      @db.Uuid
+  
+  month             DateTime    @db.Date
+  leadsProcessed    Int         @default(0)
+  messagesProcessed Int         @default(0)
+  storageUsed       Int         @default(0)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  @@unique([subscriptionId, month])
+  @@index([subscriptionId])
+}
+
+model Invoice {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subscriptionId    String      @db.Uuid
+  
+  invoiceNumber     String      @unique @db.VarChar(50)
+  status            String      @default("DRAFT") @db.VarChar(20)
+  
+  amount            Float
+  currency          String      @default("BRL") @db.Char(3)
+  
+  issuedAt          DateTime    @db.Timestamp(0)
+  dueAt             DateTime    @db.Timestamp(0)
+  paidAt            DateTime?   @db.Timestamp(0)
+  
+  items             Json
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([issuedAt])
+}
+
+// ============================================
+// INTEGRATIONS
+// ============================================
+
+model Integration {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  type              IntegrationType
+  name              String      @db.VarChar(255)
+  description       String?     @db.Text
+  
+  config            String      @db.Text
+  
+  isActive          Boolean     @default(true)
+  
+  apiKey            String?     @db.Text
+  apiSecret         String?     @db.Text
+  webhookUrl        String?     @db.VarChar(500)
+  webhookSecret     String?     @db.VarChar(255)
+  
+  lastSyncAt        DateTime?   @db.Timestamp(0)
+  nextSyncAt        DateTime?   @db.Timestamp(0)
+  syncStatus        String      @default("IDLE") @db.VarChar(20)
+  
+  syncCount         Int         @default(0)
+  lastError         String?     @db.Text
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  webhookLogs       WebhookLog[]
+  
+  @@unique([tenantId, type])
+  @@index([tenantId])
+  @@index([type])
+  @@index([isActive])
+}
+
+model WebhookLog {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationId     String      @db.Uuid
+  
+  event             String      @db.VarChar(100)
+  payload           Json
+  status            Int         @db.SmallInt
+  response          Json?
+  
+  processedAt       DateTime?   @db.Timestamp(0)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  integration       Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  
+  @@index([integrationId])
+  @@index([event])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================
+// AI & PROMPTS
+// ============================================
+
+model AIPrompt {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  name              String      @db.VarChar(255)
+  description       String?     @db.Text
+  
+  systemPrompt      String      @db.Text
+  temperature       Float       @default(0.7)
+  maxTokens         Int         @default(1000)
+  
+  version           Int         @default(1)
+  isActive          Boolean     @default(true)
+  
+  tags              String[]    @default([])
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  updatedAt         DateTime    @updatedAt @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  userId            String?     @db.Uuid
+  
+  type              String      @db.VarChar(50)
+  title             String      @db.VarChar(255)
+  message           String      @db.Text
+  
+  isRead            Boolean     @default(false)
+  readAt            DateTime?   @db.Timestamp(0)
+  
+  relatedId         String?     @db.Uuid
+  priority          String      @default("NORMAL") @db.VarChar(20)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user              User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([tenantId])
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================
+// AUDIT & SECURITY
+// ============================================
+
+model AuditLog {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  userId            String?     @db.Uuid
+  
+  action            AuditAction
+  entityType        String      @db.VarChar(50)
+  entityId          String      @db.Uuid
+  
+  oldValues         Json?
+  newValues         Json?
+  changesSummary    String?     @db.Text
+  
+  ipAddress         String?     @db.VarChar(45)
+  userAgent         String?     @db.Text
+  
+  status            String      @default("SUCCESS") @db.VarChar(20)
+  errorMessage      String?     @db.Text
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  company           Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user              User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([tenantId])
+  @@index([userId])
+  @@index([entityType])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============================================
+// ACTIVITY & ANALYTICS
+// ============================================
+
+model ActivityLog {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  agentId           String?     @db.Uuid
+  
+  eventType         String      @db.VarChar(50)
+  duration          Int?
+  
+  metadata          Json        @default("{}")
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  @@index([tenantId])
+  @@index([agentId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model Analytics {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String      @db.Uuid
+  
+  date              DateTime    @db.Date
+  
+  totalLeads        Int         @default(0)
+  totalMessages     Int         @default(0)
+  avgResponseTime   Float?
+  closureRate       Float?
+  avgSentiment      Float?
+  
+  agentCount        Int         @default(0)
+  activeConversations Int       @default(0)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamp(0)
+  
+  @@unique([tenantId, date])
+  @@index([tenantId])
+  @@index([date])
+}

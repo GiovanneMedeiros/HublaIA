@@ -1,0 +1,16 @@
+.env
+.env.local
+.env.*.local
+node_modules/
+apps/**/node_modules/
+apps/**/.next/
+apps/**/dist/
+apps/**/build/
+apps/**/out/
+apps/**/coverage/
+apps/**/.cache/
+apps/**/.turbo/
+apps/**/playwright-report/
+apps/**/test-results/
+apps/**/vite.svg
+apps/**/*.tsbuildinfo
